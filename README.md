@@ -1,8 +1,8 @@
-# Your Project Name
+# Mneme - Mobile App Exploration Guidance Agent
 
 ## Description
 
-This project is a FastAPI-based application designed to process XML layouts and images to prioritize actions using a language model. It leverages OpenAI's GPT-4o for reasoning-based prioritization and provides a RESTful API for interaction.
+This project is a FastAPI-based application designed to process XML layouts and images to prioritize actions using a large language model. It leverages OpenAI's GPT-4o for reasoning-based prioritization and provides a RESTful API for interaction.
 
 ## Installation
 
