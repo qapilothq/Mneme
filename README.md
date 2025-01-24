@@ -8,8 +8,8 @@ This project is a FastAPI-based application designed to process XML layouts and 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/yourproject.git
-   cd yourproject
+   git clone https://github.com/qapilothq/Mneme.git
+   cd Mneme
    ```
 
 2. **Set up a virtual environment**:
@@ -32,6 +32,7 @@ This project is a FastAPI-based application designed to process XML layouts and 
 ## Usage
 
 To run the application, use the following command:
+
     ```bash
     uvicorn main:app --host 0.0.0.0 --port 8000
     ```
@@ -49,7 +50,7 @@ To run the application, use the following command:
     - `image_url`: URL to fetch image (optional).
   - **Response**:
     - `status`: Success or error message.
-    - `agent_response`: List of ranked actions.
+    - `agent_response`: List of ranked elements to act on with metadata to identify the element, ordered with ranking using field `llm_rank`
     - `explanation`: Explanation of the prioritization.
 
 - **GET /health**: Returns the health status of the application.
