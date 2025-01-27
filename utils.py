@@ -92,12 +92,12 @@ def prioritize_actions(screen_context, actions, history, llm):
     # LLM reasoning
     llm_response = llm_prioritize_actions(
         screen_context,
-        [action for action in actions if action['heuristic_score'] > 0],
+        [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")],
         history,
         llm
     )
 
-    print(f"LLM response: {llm_response}")
+    # print(f"LLM response: {llm_response}")
     content = llm_response.content.replace('```json\n', '').replace('\n```', '').replace('\n', '')
     # Parse the JSON response
     response_dict = json.loads(content)
@@ -151,65 +151,130 @@ def encode_image(input_source):
         print(f"Error encoding image: {e}")
         return None
 
+def parse_bounds(bounds_str: str):
+    """Parse bounds string '[left,top][right,bottom]' into tuple"""
+    try:
+        coords = bounds_str.strip('[]').split('][')
+        left, top = map(int, coords[0].split(','))
+        right, bottom = map(int, coords[1].split(','))
+        return (left, top, right, bottom)
+    except Exception as e:
+        self.logger.error(f"Failed to parse bounds '{bounds_str}': {str(e)}")
+        return (0, 0, 0, 0)
+
 def parse_layout(xml):
+    """
+    Parse XML layout into UIElement objects
+    Returns:
+    - A list of dictionaries representing UI elements
+    """
+    elements = []
+    
+    def get_xpath(node):
         """
-        Parse XML layout into UIElement objects
-        Returns:
-        - A list of dictionaries representing UI elements
-        """
-        elements = []
+        Generate the XPath for a given XML node.
         
-        def parse_bounds(bounds_str: str):
-            """Parse bounds string '[left,top][right,bottom]' into tuple"""
-            try:
-                coords = bounds_str.strip('[]').split('][')
-                left, top = map(int, coords[0].split(','))
-                right, bottom = map(int, coords[1].split(','))
-                return (left, top, right, bottom)
-            except Exception as e:
-                self.logger.error(f"Failed to parse bounds '{bounds_str}': {str(e)}")
-                return (0, 0, 0, 0)
+        Args:
+        - node: An lxml etree Element object.
 
-        def check_if_element_is_ad(node: ET.Element) -> bool:
-            return False
+        Returns:
+        - A string representing the XPath of the node.
+        """
+        path = []
+        while node is not None:
+            parent = node.getparent()
+            if parent is not None:
+                siblings = parent.findall(node.tag)
+                if len(siblings) > 1:
+                    index = siblings.index(node) + 1
+                    path.append(f"{node.tag}[{index}]")
+                else:
+                    path.append(node.tag)
+            else:
+                path.append(node.tag)
+            node = parent
+        return '/' + '/'.join(reversed(path))
 
-        def check_if_element_is_external(node: ET.Element) -> bool:
-            return False
+    def check_if_element_is_ad(node):
+        return False
 
-        def extract_element(node: ET.Element) -> None:
-            """Recursively extract elements from XML tree"""
-            bounds = parse_bounds(node.get('bounds', '[0,0][0,0]'))
-            
-            description = node.get("text", "") + " " + node.get("content-desc", "")
-            attributes = {
-                    "element_type": node.tag,
-                    "bounds": bounds,
-                    "content_desc": node.get('content-desc'),
-                    "text": node.get('text'),
-                    "clickable": node.get('clickable') == 'true',
-                    "focused": node.get('focused') == 'true',
-                    "enabled": node.get('enabled') == 'true',
-                    "resource_id": node.get('resource-id'),
-                    "class_name": node.get('class'),
-                    "is_external": check_if_element_is_external(node),
-                    "is_ad": check_if_element_is_ad(node)
-                }
-            # Create a dictionary for the UI element
-            ui_element_dict = {
-                "description": description.strip(),
-                "heuristic_score": heuristic_score(description.strip(), attributes),
-                "attributes" : attributes
+    def check_if_element_is_external(node):
+        return False
+
+    def extract_element(node):
+        """Recursively extract elements from XML tree"""
+        bounds = parse_bounds(node.get('bounds', '[0,0][0,0]'))
+        
+        description = node.get("text", "") + " " + node.get("content-desc", "")
+        attributes = {
+                "element_type": node.tag,
+                "bounds": bounds,
+                "content_desc": node.get('content-desc'),
+                "text": node.get('text'),
+                "clickable": node.get('clickable') == 'true',
+                "focused": node.get('focused') == 'true',
+                "enabled": node.get('enabled') == 'true',
+                "resource_id": node.get('resource-id'),
+                "class_name": node.get('class'),
+                # "xpath": get_xpath(node),
+                "is_external": check_if_element_is_external(node),
+                "is_ad": check_if_element_is_ad(node)
             }
+        # Create a dictionary for the UI element
+        ui_element_dict = {
+            "description": description.strip(),
+            "heuristic_score": heuristic_score(description.strip(), attributes),
+            "attributes" : attributes
+        }
 
-            # Append the dictionary to the elements list
-            elements.append(ui_element_dict)
-            
-            for child in node:
-                extract_element(child)
+        # Append the dictionary to the elements list
+        elements.append(ui_element_dict)
+        
+        for child in node:
+            extract_element(child)
 
-        layout_tree = ET.fromstring(xml)
-        extract_element(layout_tree)
-        return elements
+    layout_tree = ET.fromstring(xml)
+    extract_element(layout_tree)
+    return elements
+
+def transform_popup_to_ranked_action(pop_up_element):
+    # Transforming the popup element output to action format
+    bounds = parse_bounds(pop_up_element.get('bounds', '[0,0][0,0]'))
+        
+    description = pop_up_element.get("text", "") + " " + pop_up_element.get("content-desc", "")
+    attributes = {
+            "element_type": pop_up_element.get('element_type'),
+            "bounds": bounds,
+            "content_desc": pop_up_element.get('element_details'),
+            "text": pop_up_element.get('text'),
+            "clickable": pop_up_element.get('clickable', 'False').lower() == 'true',
+            "focused": pop_up_element.get('focused', 'False').lower() == 'true',
+            "enabled": pop_up_element.get('enabled', 'False').lower() == 'true',
+            "resource_id": pop_up_element.get('resource_id'),
+            "class_name": pop_up_element.get('class_name'),
+            "xpath": pop_up_element.get('xpath'),
+            "is_external": False,
+            "is_ad": False
+        }
+    # Create a dictionary for the UI element
+    transformed_action = {
+        "description": description.strip(),
+        "heuristic_score": 0,
+        "attributes" : attributes,
+        "llm_rank": 1
+    }
+    
+    return transformed_action
+
+def map_data_fields_to_ranked_actions(ranked_actions, data_fields):
+    for action in ranked_actions:
+        resource_id = action.get("attributes", {}).get("resource_id")
+        for data_field in data_fields:
+            if data_field.get("field_name") == resource_id:
+                # Add generated data info to the action
+                action["generated_data"] = data_field
+                break  # Assuming one-to-one mapping, break after finding a match
+    return ranked_actions
 
 def get_file_content(file_path_or_url: str, is_image: bool = False) -> str:
     if file_path_or_url.startswith(('http://', 'https://')):
