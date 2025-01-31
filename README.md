@@ -31,6 +31,8 @@ Current integration works like a microservice architecture. Stay tuned for a tru
    Create a `.env` file in the root directory and add your OpenAI API key:
    ```
    OPENAI_API_KEY=your_openai_api_key
+   POPUP_HANDLER_URL=popup_handler_API_endpoint
+   TEST_DATA_GENERATOR_URL=test_data_generator_API_endpoint
    ```
 
 ## Usage
