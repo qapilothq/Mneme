@@ -4,6 +4,10 @@
 
 This project is a FastAPI-based application designed to process XML layouts and images to prioritize actions using a large language model. It leverages OpenAI's GPT-4o for reasoning-based prioritization and provides a RESTful API for interaction.
 
+This agent integrates with [PopUp Handler](https://github.com/qapilothq/Valetudo) and [Test Data Generator](https://github.com/qapilothq/Euporie) to help the exploration be more contextual and provide data wherever required.
+
+Current integration works like a microservice architecture. Stay tuned for a true multi-agent architecture.
+
 ## Installation
 
 1. **Clone the repository**:
