@@ -2,7 +2,7 @@ from llm import initialize_llm
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any, Dict
 from utils import parse_layout, encode_image, get_file_content, prioritize_actions, \
     llm_generate_screen_context, map_data_fields_to_ranked_actions, transform_popup_to_ranked_action
 from tools import check_for_popup, generate_test_data
@@ -20,7 +20,7 @@ class APIRequest(BaseModel):
     image: Optional[str] = None
     user_prompt: Optional[str] = ""
     xml: Optional[str] = None
-    history: Optional[list] = []
+    history: Optional[list[Any]] = []
     xml_url: Optional[str] = None
     image_url: Optional[str] = None
 
@@ -52,7 +52,7 @@ def process_xml(xml, history, llm, xml_url):
 
 
 @app.post("/invoke")
-async def run_service(request: APIRequest):
+async def run_service(request: APIRequest) -> Dict[str, Any]:
     try:
         llm_key = os.getenv("OPENAI_API_KEY")
         if not llm_key:

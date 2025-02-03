@@ -13,7 +13,7 @@ def check_for_popup(xml_url, image_url=None, test_case_description=""):
     # API request to popup-handler
     api_response = make_api_request(os.getenv("POPUP_HANDLER_URL"), payload)
 
-    if api_response.get("status", "").lower() == 'success':
+    if api_response and api_response.get("status", "").lower() == 'success':
         agent_response = api_response.get("agent_response", {})
         if agent_response.get("popup_detection", "").lower() == "yes":
             print("pop up detected")
@@ -37,7 +37,7 @@ def generate_test_data(xml_url, image_url=None, config_data={}):
     # API request to popup-handler
     api_response = make_api_request(os.getenv("TEST_DATA_GENERATOR_URL"), payload)
 
-    if api_response.get("status", "").lower() == 'success':
+    if api_response and api_response.get("status", "").lower() == 'success':
         agent_response = api_response.get("agent_response", {})
         if agent_response.get("data_generation_required", "").lower() == "yes":
             print("data generation required")

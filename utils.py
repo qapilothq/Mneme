@@ -1,10 +1,13 @@
 from langchain.prompts import PromptTemplate
+from fastapi import HTTPException
 from dotenv import load_dotenv
 from prompts import action_prioritization_template, screen_context_generation_template
 from llm import initialize_llm
 import xml.etree.ElementTree as ET
 import json
 import os
+import requests
+import base64
  
 load_dotenv()
 
@@ -159,7 +162,7 @@ def parse_bounds(bounds_str: str):
         right, bottom = map(int, coords[1].split(','))
         return (left, top, right, bottom)
     except Exception as e:
-        self.logger.error(f"Failed to parse bounds '{bounds_str}': {str(e)}")
+        print(f"Failed to parse bounds '{bounds_str}': {str(e)}")
         return (0, 0, 0, 0)
 
 def parse_layout(xml):
@@ -302,34 +305,3 @@ def get_file_content(file_path_or_url: str, is_image: bool = False) -> str:
         # Return string for XML content
         return content.decode('utf-8')
 
-# Example usage
-if __name__ == "__main__":
-    # Initialize the LLM (can be switched to Anthropic, etc.)
-    llm_key = os.getenv("OPENAI_API_KEY")
-    if not llm_key:
-        raise HTTPException(status_code=500, detail="API key not found. Please check your environment variables.")
-    llm = initialize_llm(llm_key)
-
-    # Screen context (mock example)
-    screen_context = "Login screen with options to sign in, register, or skip."
-
-    # List of actions with metadata
-    actions = [
-        {"description": "Click 'Sign In'", "attributes": {"element_type": "button", "is_ad": False, "is_external": False}},
-        {"description": "Click 'Register'", "attributes": {"element_type": "button", "is_ad": False, "is_external": False}},
-        {"description": "Click 'Skip'", "attributes": {"element_type": "button", "is_ad": False, "is_external": False}},
-        {"description": "Click 'Sponsored Ad'", "attributes": {"element_type": "image", "is_ad": True, "is_external": True}}
-    ]
-
-    # Action history (mock example)
-    history = ["Visited Home Screen", "Clicked 'Get Started'"]
-
-    # Prioritize actions
-    ranked_actions = prioritize_actions(screen_context, actions, history, llm)
-
-    # Output ranked actions
-    for action in ranked_actions:
-        print(f"Action: {action['description']}")
-        print(f"  Final Score: {action['final_score']}")
-        print(f"  Explanation: {action['explanation']}")
-        print()
