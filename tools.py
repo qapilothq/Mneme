@@ -16,7 +16,7 @@ def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_descript
 
     if api_response and api_response.get("status", "").lower() == 'success':
         agent_response = api_response.get("agent_response", {})
-        if agent_response.get("popup_detection", "").lower() == "yes":
+        if agent_response.get("popup_detection", "").strip().lower() == "true":
             print("pop up detected")
             primary_method = agent_response.get("primary_method, {}")
             if primary_method and "element_metadata" in primary_method:
