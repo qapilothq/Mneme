@@ -2,7 +2,6 @@ import requests
 import os
 
 
-
 def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_description="Close the pop up"):
 
     payload = {
@@ -19,8 +18,12 @@ def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_descript
         agent_response = api_response.get("agent_response", {})
         if agent_response.get("popup_detection", "").lower() == "yes":
             print("pop up detected")
-            element_metadata = agent_response.get("element_metadata", {})
-            return True, element_metadata
+            primary_method = agent_response.get("primary_method, {}")
+            if primary_method and "element_metadata" in primary_method:
+                element_metadata = agent_response.get("element_metadata", {})
+                return True, element_metadata
+            else:
+                return False, {}
         else:
             print("pop up not detected")
             return False, {}
