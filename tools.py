@@ -3,11 +3,13 @@ import os
 
 
 
-def check_for_popup(xml_url, image_url=None, test_case_description=""):
+def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_description="Close the pop up"):
 
     payload = {
-        "xml": xml_url,
-        "image": image_url,
+        "xml_url": xml_url,
+        "xml": xml,
+        "image_url": image_url,
+        "image": image,
         "testcase_dec": test_case_description
     }
     # API request to popup-handler
@@ -27,10 +29,12 @@ def check_for_popup(xml_url, image_url=None, test_case_description=""):
         return False, {}
 
 
-def generate_test_data(xml_url, image_url=None, config_data={}):
+def generate_test_data(xml, xml_url, image=None, image_url=None, config_data={}):
 
     payload = {
-        "xml": xml_url,
+        "xml": xml,
+        "xml_url": xml_url,
+        "image": image,
         "image": image_url,
         "config": config_data
     }
