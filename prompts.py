@@ -10,6 +10,10 @@ action_prioritization_template = """
     {history}
     Note: Ignore the history if nothing is given. Complete the objective based on the actionable elements provided alone.
 
+    This is the user prompt provided by the user to help us understand what the possible user journey is:
+    {user_prompt}
+    Note: Ignore the user prompt if nothing is given. Please create an understanding of the user journey yourself.
+    
     Objective:
     You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
     You are intended to help in the exploration of the app by providing a priority order to the actionable elements on the screen.

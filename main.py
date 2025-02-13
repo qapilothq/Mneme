@@ -13,15 +13,7 @@ import base64
 
 
 load_dotenv()
-try:
-    llm_key = os.getenv("OPENAI_API_KEY")
-    if not llm_key:
-        raise Exception(detail="API key not found. Please check your environment variables.")
-    print("LLM key found in the environment")
-    llm = initialize_llm(llm_key)
-    print("LLM initialized")
-except Exception as e:
-    raise Exception
+global llm
 
 
 app = FastAPI()
@@ -42,7 +34,7 @@ def validate_base64(base64_string: str) -> bool:
     except Exception:
         return False
 
-def seek_guidance(xml, image, xml_url, image_url, config_data, history, llm):
+def seek_guidance(xml, image, xml_url, image_url, config_data, user_prompt, history, llm):
     ui_elements = parse_layout(xml)
     # screen_context = llm_generate_screen_context(xml, llm)
     screen_context = ""
@@ -56,8 +48,8 @@ def seek_guidance(xml, image, xml_url, image_url, config_data, history, llm):
         # Prioritize actions
         ranked_actions, explanation = prioritize_actions(screen_context=screen_context, 
                                             actions=ui_elements, 
-                                            history=history, 
-                                            llm=llm)
+                                            history=history,
+                                            user_prompt=user_prompt, llm=llm)
         print(f"No of Actions: {len(ranked_actions)}")
         data_gen_required, data_fields = generate_test_data(xml, xml_url, image, image_url, config_data)
 
@@ -101,7 +93,7 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
         
         ranked_actions, explanation = seek_guidance(xml=xml, image=base64_image, 
                                                     xml_url=request.xml_url, image_url=request.image_url,
-                                                    config_data = config_data,
+                                                    config_data = config_data, user_prompt=request.user_prompt,
                                                     history=request.history, llm=llm)
         
 
@@ -130,4 +122,13 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    try:
+        llm_key = os.getenv("OPENAI_API_KEY")
+        if not llm_key:
+            raise Exception(detail="API key not found. Please check your environment variables.")
+        print("LLM key found in the environment")
+        llm = initialize_llm(llm_key)
+        print("LLM initialized")
+    except Exception as e:
+        raise Exception
     uvicorn.run(app, host="0.0.0.0", port=8000)

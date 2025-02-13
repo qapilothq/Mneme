@@ -48,15 +48,16 @@ To run the application, use the following command:
 
 - **POST /invoke**: Processes the input XML or image and returns prioritized actions.
   - **Request Body**: 
-    - `image`: Base64 encoded image string (optional).
-    - `user_prompt`: Custom user prompt (optional).
-    - `xml`: XML string (optional).
-    - `history`: List of previous actions (optional).
-    - `xml_url`: URL to fetch XML (optional).
-    - `image_url`: URL to fetch image (optional).
+    - `image`: string | Base64 encoded image string (optional).
+    - `user_prompt`: string | Custom user prompt (optional).
+    - `xml`: string | XML string (optional).
+    - `history`: list | List of previous actions (optional).
+    - `xml_url`: URL string | URL to fetch XML (optional).
+    - `image_url`: URL string | URL to fetch image (optional).
+    - `config_data`: dict | Configuration data for test data generation (optional).
   - **Response**:
     - `status`: Success or error message.
-    - `agent_response`: List of ranked elements to act on with metadata to identify the element, ordered with ranking using field `llm_rank`
+    - `agent_response`: List of ranked elements to act on with metadata to identify the element, ordered with ranking using field `llm_rank`. Also has test data to fill based on the filed type
     - `explanation`: Explanation of the prioritization.
 
 - **GET /health**: Returns the health status of the application.

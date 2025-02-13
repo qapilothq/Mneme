@@ -12,7 +12,7 @@ import base64
 load_dotenv()
 
 # Use LangChain for reasoning-based prioritization
-def llm_prioritize_actions(screen_context, actions, history, llm):
+def llm_prioritize_actions(screen_context, actions, history, user_prompt, llm):
     """
     Use an LLM to prioritize actions based on screen context and history.
     Args:
@@ -25,12 +25,13 @@ def llm_prioritize_actions(screen_context, actions, history, llm):
     - List of actions ranked by priority with explanations.
     """
     # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history"], template=action_prioritization_template)
+    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt"], template=action_prioritization_template)
     # Fill the prompt template
     filled_prompt = prompt_template.format(
         screen_context=screen_context,
         actions=actions,
-        history=history
+        history=history,
+        user_prompt=user_prompt
     )
 
     # Invoke the LLM
@@ -76,7 +77,7 @@ def heuristic_score(action_description, attributes):
     return score
 
 # Prioritize actions with LangChain LLM
-def prioritize_actions(screen_context, actions, history, llm):
+def prioritize_actions(screen_context, actions, history, user_prompt, llm):
     """
     Prioritize actions using both heuristic and LLM reasoning.
     Args:
@@ -97,6 +98,7 @@ def prioritize_actions(screen_context, actions, history, llm):
         screen_context,
         [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")],
         history,
+        user_prompt,
         llm
     )
 
