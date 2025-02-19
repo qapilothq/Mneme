@@ -1,3 +1,4 @@
+from typing import Any
 from langchain.prompts import PromptTemplate
 from fastapi import HTTPException
 from dotenv import load_dotenv
@@ -272,14 +273,43 @@ def transform_popup_to_ranked_action(pop_up_element):
     return transformed_action
 
 def map_data_fields_to_ranked_actions(ranked_actions, data_fields):
-    for action in ranked_actions:
-        resource_id = action.get("attributes", {}).get("resource_id")
-        for data_field in data_fields:
-            if data_field.get("field_name") == resource_id:
-                # Add generated data info to the action
-                action["generated_data"] = data_field
-                break  # Assuming one-to-one mapping, break after finding a match
-    return ranked_actions
+    try:
+        for action in ranked_actions:
+            action_identifier = get_element_identifier(action.get("attributes", {}))
+            if action_identifier:
+                # Check for data only if action element has an identifier
+                for data_field in data_fields:
+                    if "metadata" in data_field:
+                        data_field_identifier = get_element_identifier(data_field.get("metadata", {}))
+                        if data_field_identifier:
+                            # Check for a match only if data field has an identifier
+                            if action_identifier == data_field_identifier:
+                                # Add generated data info to the action
+                                action["generated_data"] = data_field
+                                # Remove the matched data_field from the list
+                                data_fields.remove(data_field)
+                                break # Assuming one-to-one mapping, break after finding a match 
+        
+    except Exception as e:
+        print("exception in mapping data fields to prioritized actions")
+    finally:
+        return ranked_actions
+
+def get_element_identifier(element_dict) -> str:
+
+    if element_dict:
+        resource_id = element_dict.get('resource_id')
+        resource_id = resource_id.strip() if resource_id is not None else ""
+
+        text = element_dict.get("text")
+        text = text.strip() if text is not None else ""
+
+        content_desc = element_dict.get("content_desc")
+        content_desc = content_desc.strip() if content_desc is not None else ""
+
+        return (resource_id + text + content_desc).strip()
+    else:
+        return ""
 
 def get_file_content(file_path_or_url: str, is_image: bool = False) -> str:
     if file_path_or_url.startswith(('http://', 'https://')):
