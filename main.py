@@ -45,7 +45,7 @@ def seek_guidance(xml, image, xml_url, image_url, config_data, user_prompt, hist
         return [transform_popup_to_ranked_action(pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions."
     else:
         # Prioritize actions
-        ranked_actions, explanation = prioritize_actions(screen_context=screen_context, 
+        ranked_actions, explanation = prioritize_actions(screen_context=screen_context, image=image,
                                             actions=ui_elements, 
                                             history=history,
                                             user_prompt=user_prompt, llm=llm)

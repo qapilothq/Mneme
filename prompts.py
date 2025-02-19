@@ -1,7 +1,11 @@
 action_prioritization_template = """
     Following screen context describes the mobile app screen in short:
     {screen_context}
-    Note: Ignore the screen context if nothing is given. Please create an understanding of the screen yourself.
+    Note: Ignore the screen context if nothing is given. Please create an understanding of the screen yourself based on the image given below or the list of actions given below.
+
+    Here is the screenshot of the mobile app screen:
+    {base64_image}
+    Note: Ignore the screenshot if nothing is given. Please create an understanding of the screen based on the actions given below.
 
     These are available actionable elements:
     {actions}
@@ -27,6 +31,9 @@ action_prioritization_template = """
     As an example to the 4th guideline, on a login screen, entering username, entering password and clicking login are all part of the same user journey.
     This journey can be successfull only when the priority ranking of elements to act on reflects the order - enter username, enter password and click login button. 
     This would not be an meaningful journey in any other order.
+    6. Use 'heuristic_score' mentioned for each action as one of the guides to give priority. Higher the heuristic score, higher the priority.
+    7. Also, there are boolean fields called 'focused' and 'enabled' inside attributes of each action. Use these values to decide the priority order. Prioritize the enabled and focussed elements over others.
+    Also you can use the image, if available, to identify which elements are focused and enabled, and are important for the flow of the journey.
 
     Output format:
     Please generate the output in JSON format with following keys - 

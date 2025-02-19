@@ -13,7 +13,7 @@ import base64
 load_dotenv()
 
 # Use LangChain for reasoning-based prioritization
-def llm_prioritize_actions(screen_context, actions, history, user_prompt, llm):
+def llm_prioritize_actions(screen_context, base64_image, actions, history, user_prompt, llm):
     """
     Use an LLM to prioritize actions based on screen context and history.
     Args:
@@ -26,10 +26,11 @@ def llm_prioritize_actions(screen_context, actions, history, user_prompt, llm):
     - List of actions ranked by priority with explanations.
     """
     # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt"], template=action_prioritization_template)
+    prompt_template = PromptTemplate(input_variables=["screen_context", "base64_image", "actions", "history", "user_prompt"], template=action_prioritization_template)
     # Fill the prompt template
     filled_prompt = prompt_template.format(
         screen_context=screen_context,
+        base64_image=base64_image,
         actions=actions,
         history=history,
         user_prompt=user_prompt
@@ -63,6 +64,8 @@ def llm_generate_screen_context(xml, llm):
 # Heuristic scoring remains unchanged
 def heuristic_score(action_description, attributes):
     """Assign a heuristic score to an action based on its attributes."""
+    important_buttons = ["login", "signup", "sign up", "sign-up", "submit"]
+    input_fields = ["input", "email", "password", "otp", "pass", "phone", "mobile", "name"]
     score = 0
     if attributes.get("is_external", False):
         score -= 10
@@ -70,15 +73,34 @@ def heuristic_score(action_description, attributes):
         score -= 15
     if len(action_description.strip()) <= 1:
         score -= 50
-    elif "login" in action_description.lower() or "submit" in action_description.lower():
+    if check_if_important(action_description=action_description, resource_id=attributes.get("resource_id"), patterns=important_buttons):
         score += 20
+    elif check_if_important(action_description=action_description, resource_id=attributes.get("resource_id"), patterns=input_fields):
+        score += 30
     elif "button" in attributes.get("element_type", "").lower():
         score += 10
+    elif "edittext" in attributes.get("element_type", "").lower():
+        score += 15
     
     return score
 
+def check_if_important(action_description, resource_id, patterns):
+    # Ensure action_description and resource_id are not None or empty
+    if not action_description:
+        action_description = ""
+    if not resource_id:
+        resource_id = ""
+
+    if action_description or resource_id:
+        # Check if any pattern is in action_description or resource_id
+        for pattern in patterns:
+            if pattern in action_description.lower() or pattern in resource_id.lower():
+                return True
+
+    return False
+
 # Prioritize actions with LangChain LLM
-def prioritize_actions(screen_context, actions, history, user_prompt, llm):
+def prioritize_actions(screen_context, image, actions, history, user_prompt, llm):
     """
     Prioritize actions using both heuristic and LLM reasoning.
     Args:
@@ -97,6 +119,7 @@ def prioritize_actions(screen_context, actions, history, user_prompt, llm):
     # LLM reasoning
     llm_response = llm_prioritize_actions(
         screen_context,
+        image,
         [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")],
         history,
         user_prompt,
