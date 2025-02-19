@@ -16,7 +16,8 @@ def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_descript
 
     if api_response and api_response.get("status", "").lower() == 'success':
         agent_response = api_response.get("agent_response", {})
-        if agent_response.get("popup_detection", "").strip().lower() == "true":
+        popup_detected = agent_response.get("popup_detection")
+        if isinstance(popup_detected, bool) and popup_detected:
             print("pop up detected")
             primary_method = agent_response.get("primary_method, {}")
             if primary_method and "element_metadata" in primary_method:
@@ -34,27 +35,32 @@ def check_for_popup(xml, xml_url, image=None, image_url=None, test_case_descript
 
 def generate_test_data(xml, xml_url, image=None, image_url=None, config_data={}):
 
-    payload = {
-        "xml": xml,
-        "xml_url": xml_url,
-        "image": image,
-        "image": image_url,
-        "config": config_data
-    }
-    # API request to popup-handler
-    api_response = make_api_request(os.getenv("TEST_DATA_GENERATOR_URL"), payload)
+    try:
+        payload = {
+            "xml": xml,
+            "xml_url": xml_url,
+            "image": image,
+            "image_url": image_url,
+            "config": config_data
+        }
+        # API request to popup-handler
+        api_response = make_api_request(os.getenv("TEST_DATA_GENERATOR_URL"), payload)
 
-    if api_response and api_response.get("status", "").lower() == 'success':
-        agent_response = api_response.get("agent_response", {})
-        if agent_response.get("data_generation_required", "").lower() == "yes":
-            print("data generation required")
-            fields = agent_response.get("fields", {})
-            return True, fields
+        if api_response and api_response.get("status", "").lower() == 'success':
+            agent_response = api_response.get("agent_response", {})
+            datagen_required = agent_response.get("data_generation_required")
+            if isinstance(datagen_required, bool) and datagen_required:
+                print("data generation required")
+                fields = agent_response.get("fields", {})
+                return True, fields
+            else:
+                print("data generation not required")
+                return False, {}
         else:
-            print("data generation not required")
+            print("data generation failed")
             return False, {}
-    else:
-        print("data generation failed")
+    except Exception as e:
+        print("data generation failed with an exception")
         return False, {}
 
 
