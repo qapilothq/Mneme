@@ -1,6 +1,6 @@
 /__pycache__
 .env
-.venv
+.venv/
 *.toml
 *.log
 venv/

@@ -1,19 +1,20 @@
-from typing import Any
+import traceback
 from langchain.prompts import PromptTemplate
 from fastapi import HTTPException
-from dotenv import load_dotenv
+from langsmith import traceable
 from prompts import action_prioritization_template, screen_context_generation_template
-from llm import initialize_llm
 import xml.etree.ElementTree as ET
 import json
 import os
 import requests
 import base64
- 
-load_dotenv()
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+@traceable
 # Use LangChain for reasoning-based prioritization
-def llm_prioritize_actions(screen_context, base64_image, actions, history, user_prompt, llm):
+def llm_prioritize_actions(request_id, screen_context, base64_image, actions, history, user_prompt, llm):
     """
     Use an LLM to prioritize actions based on screen context and history.
     Args:
@@ -26,20 +27,31 @@ def llm_prioritize_actions(screen_context, base64_image, actions, history, user_
     - List of actions ranked by priority with explanations.
     """
     # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["screen_context", "base64_image", "actions", "history", "user_prompt"], template=action_prioritization_template)
+    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt"], template=action_prioritization_template)
     # Fill the prompt template
     filled_prompt = prompt_template.format(
         screen_context=screen_context,
-        base64_image=base64_image,
         actions=actions,
         history=history,
         user_prompt=user_prompt
     )
+    messages = [("system", filled_prompt)]
+    if base64_image:
+        messages.append(("human", [
+                        {"type": "text", "text": "Here is the screenshot of the mobile app screen. Please create an understanding of the screen to give a prioritization to the elements to act on."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]))
 
-    # Invoke the LLM
-    response = llm.invoke(filled_prompt)
-    return response
-
+    try:
+        # Invoke the LLM
+        response = llm.invoke(input=messages)
+        logging.error(f"requestid :: {request_id} :: LLM invokation succesfull")
+        return response
+    except Exception as e:
+        logging.error(f"requestid :: {request_id} :: LLM invokation failed; couldn't prioritize - {str(e)} -- {traceback.format_exc()}")
+        return None
+    
+@traceable
 def llm_generate_screen_context(xml, llm):
     """
     Use an LLM to generate screen context based on the xml.
@@ -99,8 +111,9 @@ def check_if_important(action_description, resource_id, patterns):
 
     return False
 
+@traceable
 # Prioritize actions with LangChain LLM
-def prioritize_actions(screen_context, image, actions, history, user_prompt, llm):
+async def prioritize_actions(request_id, screen_context, image, actions, history, user_prompt, llm):
     """
     Prioritize actions using both heuristic and LLM reasoning.
     Args:
@@ -116,34 +129,47 @@ def prioritize_actions(screen_context, image, actions, history, user_prompt, llm
     # for action in actions:
     #     action['heuristic_score'] = heuristic_score(action['description'], action['attributes'])
 
+    logging.info(f"requestid :: {request_id} :: Calling LLM to prioritize UI elments")
     # LLM reasoning
+    clickable_elements_with_heuristic_score = [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")]
+    logging.info(f"requestid :: {request_id} :: Number of clickable elements with heuristic score higher than zero - {len(clickable_elements_with_heuristic_score)}")
     llm_response = llm_prioritize_actions(
-        screen_context,
-        image,
-        [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")],
-        history,
-        user_prompt,
-        llm
+        request_id=request_id,
+        screen_context=screen_context,
+        base64_image=image,
+        actions=clickable_elements_with_heuristic_score,
+        history=history,
+        user_prompt=user_prompt,
+        llm=llm
     )
 
-    # print(f"LLM response: {llm_response}")
-    content = llm_response.content.replace('```json\n', '').replace('\n```', '').replace('\n', '')
-    # Parse the JSON response
-    response_dict = json.loads(content)
-    ranked_actions = response_dict.get("ranked_actions", [])
-    explanation = response_dict.get("explanation", "")
-    # Parse LLM response for ranking (mock parsing for this example)
-    # for i, action in enumerate(actions):
-    #     action['llm_score'] = len(actions) - i  # Simulated LLM ranking
-    #     action['explanation'] = llm_response
+    if llm_response:
+        # print(f"LLM response: {llm_response}")
+        content = llm_response.content.replace('```json\n', '').replace('\n```', '').replace('\n', '')
+        # Parse the JSON response
+        response_dict = json.loads(content)
+        ranked_actions = response_dict.get("ranked_actions", [])
+        explanation = response_dict.get("explanation", "")
+        # Parse LLM response for ranking (mock parsing for this example)
+        # for i, action in enumerate(actions):
+        #     action['llm_score'] = len(actions) - i  # Simulated LLM ranking
+        #     action['explanation'] = llm_response
 
-    # Combine scores
-    # for action in actions:
-    #     action['final_score'] = action['heuristic_score'] + action['llm_score']
+        # Combine scores
+        # for action in actions:
+        #     action['final_score'] = action['heuristic_score'] + action['llm_score']
 
-    # Rank actions
-    ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
-    return ranked_actions, explanation
+        # Rank actions
+        ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
+        logging.error(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
+        return ranked_actions, explanation
+    else:
+        logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on heuristic score")
+        ranked_clickable_elements = sorted(clickable_elements_with_heuristic_score, key=lambda x: x['heuristic_score'], reverse=True)
+        for i in range(0, len(ranked_clickable_elements)):
+            ranked_clickable_elements[i]["llm_rank"] = i + 1
+        
+        return ranked_clickable_elements, "LLM failed to prioritize; returning order based on heuristic score"
 
 def encode_image(input_source):
     """
@@ -191,6 +217,7 @@ def parse_bounds(bounds_str: str):
         print(f"Failed to parse bounds '{bounds_str}': {str(e)}")
         return (0, 0, 0, 0)
 
+@traceable
 def parse_layout(xml):
     """
     Parse XML layout into UIElement objects
@@ -266,37 +293,44 @@ def parse_layout(xml):
     extract_element(layout_tree)
     return elements
 
-def transform_popup_to_ranked_action(pop_up_element):
+def transform_popup_to_ranked_action(request_id, pop_up_element):
     # Transforming the popup element output to action format
-    bounds = parse_bounds(pop_up_element.get('bounds', '[0,0][0,0]'))
-        
-    description = pop_up_element.get("text", "") + " " + pop_up_element.get("content-desc", "")
-    attributes = {
-            "element_type": pop_up_element.get('element_type'),
-            "bounds": bounds,
-            "content_desc": pop_up_element.get('element_details'),
-            "text": pop_up_element.get('text'),
-            "clickable": pop_up_element.get('clickable', 'False').lower() == 'true',
-            "focused": pop_up_element.get('focused', 'False').lower() == 'true',
-            "enabled": pop_up_element.get('enabled', 'False').lower() == 'true',
-            "resource_id": pop_up_element.get('resource_id'),
-            "class_name": pop_up_element.get('class_name'),
-            "xpath": pop_up_element.get('xpath'),
-            "is_external": False,
-            "is_ad": False
-        }
-    # Create a dictionary for the UI element
-    transformed_action = {
-        "description": description.strip(),
-        "heuristic_score": 0,
-        "attributes" : attributes,
-        "llm_rank": 1
-    }
-    
-    return transformed_action
-
-def map_data_fields_to_ranked_actions(ranked_actions, data_fields):
     try:
+        bounds = parse_bounds(pop_up_element.get('bounds', '[0,0][0,0]'))
+        
+        description = pop_up_element.get("text", "") + " " + pop_up_element.get("content-desc", "")
+        attributes = {
+                "element_type": pop_up_element.get('element_type'),
+                "bounds": bounds,
+                "content_desc": pop_up_element.get('element_details'),
+                "text": pop_up_element.get('text'),
+                "clickable": pop_up_element.get('clickable', 'False').lower() == 'true',
+                "focused": pop_up_element.get('focused', 'False').lower() == 'true',
+                "enabled": pop_up_element.get('enabled', 'False').lower() == 'true',
+                "resource_id": pop_up_element.get('resource_id'),
+                "class_name": pop_up_element.get('class_name'),
+                "xpath": pop_up_element.get('xpath'),
+                "is_external": False,
+                "is_ad": False
+            }
+        # Create a dictionary for the UI element
+        transformed_action = {
+            "description": description.strip(),
+            "heuristic_score": 0,
+            "attributes" : attributes,
+            "llm_rank": 1
+        }
+        logging.info(f"requestid :: {request_id} :: Pop Up detected; Returning - {transformed_action}")
+        return transformed_action
+    except Exception as e:
+        logging.info(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - {pop_up_element}")
+        logging.info(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - Stacktrace - {traceback.format_exc()}")
+        return {"description": "", "heuristic_score": 0, "attributes" : {}, "llm_rank": 1}
+
+@traceable
+def map_data_fields_to_ranked_actions(request_id, ranked_actions, data_fields):
+    try:
+        logging.info("requestid :: {request_id} :: Mapping generated data fields to prioritized actions")
         for action in ranked_actions:
             action_identifier = get_element_identifier(action.get("attributes", {}))
             if action_identifier:
@@ -314,7 +348,7 @@ def map_data_fields_to_ranked_actions(ranked_actions, data_fields):
                                 break # Assuming one-to-one mapping, break after finding a match 
         
     except Exception as e:
-        print("exception in mapping data fields to prioritized actions")
+        logging.error("requestid :: {request_id} :: Exception in mapping data fields to prioritized actions; returning ranked actions without generated data")
     finally:
         return ranked_actions
 

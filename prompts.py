@@ -3,10 +3,6 @@ action_prioritization_template = """
     {screen_context}
     Note: Ignore the screen context if nothing is given. Please create an understanding of the screen yourself based on the image given below or the list of actions given below.
 
-    Here is the screenshot of the mobile app screen:
-    {base64_image}
-    Note: Ignore the screenshot if nothing is given. Please create an understanding of the screen based on the actions given below.
-
     These are available actionable elements:
     {actions}
 

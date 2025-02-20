@@ -1,16 +1,19 @@
 from llm import initialize_llm
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
-from utils import parse_layout, encode_image, get_file_content, prioritize_actions, \
-    llm_generate_screen_context, map_data_fields_to_ranked_actions, transform_popup_to_ranked_action
+from utils import parse_layout, get_file_content, prioritize_actions, map_data_fields_to_ranked_actions, transform_popup_to_ranked_action
 from tools import check_for_popup, generate_test_data
-
+from langsmith import traceable
 from dotenv import load_dotenv
 import os
 import base64
-
+import uuid
+import traceback
+import asyncio
+import uvicorn
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
 
@@ -18,6 +21,7 @@ load_dotenv()
 app = FastAPI()
 
 class APIRequest(BaseModel):
+    request_id: Optional[str] = uuid.uuid4().hex
     image: Optional[str] = None
     user_prompt: Optional[str] = ""
     xml: Optional[str] = None
@@ -33,51 +37,65 @@ def validate_base64(base64_string: str) -> bool:
     except Exception:
         return False
 
-def seek_guidance(xml, image, xml_url, image_url, config_data, user_prompt, history, llm):
+@traceable
+async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data, user_prompt, history, llm):
+    logging.info(f"requestid :: {request_id} :: Parsing XML to extract UI elements")
     ui_elements = parse_layout(xml)
+    logging.info(f"requestid :: {request_id} :: Number of elements found - {len(ui_elements)}")
     # screen_context = llm_generate_screen_context(xml, llm)
     screen_context = ""
 
     # check if the page has a pop up
-    popup_detected, pop_up_element = check_for_popup(xml, xml_url, image, image_url)
+    popup_detected, pop_up_element = check_for_popup(request_id, xml, xml_url, image, image_url)
 
     if popup_detected:
-        return [transform_popup_to_ranked_action(pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions."
+        return [transform_popup_to_ranked_action(request_id, pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions."
     else:
-        # Prioritize actions
-        ranked_actions, explanation = prioritize_actions(screen_context=screen_context, image=image,
-                                            actions=ui_elements, 
-                                            history=history,
-                                            user_prompt=user_prompt, llm=llm)
-        print(f"No of Actions: {len(ranked_actions)}")
-        data_gen_required, data_fields = generate_test_data(xml, xml_url, image, image_url, config_data)
+        # Run prioritize_actions and generate_test_data concurrently
+        prioritize_task = asyncio.create_task(prioritize_actions(
+            request_id=request_id, screen_context=screen_context, 
+            image=image, actions=ui_elements, history=history,
+            user_prompt=user_prompt, llm=llm
+        ))
+        
+        generate_data_task = asyncio.create_task(generate_test_data(
+            request_id, xml, xml_url, image, image_url, config_data
+        ))
+
+        # Wait for both tasks to complete
+        ranked_actions, explanation = await prioritize_task
+        data_gen_required, data_fields = await generate_data_task
 
         if data_gen_required:
-            updated_ranked_actions = map_data_fields_to_ranked_actions(ranked_actions, data_fields)
+            updated_ranked_actions = map_data_fields_to_ranked_actions(request_id, ranked_actions, data_fields)
             return updated_ranked_actions, explanation
         else:
             return ranked_actions, explanation
 
-
-
+@traceable
 @app.post("/invoke")
 async def run_service(request: APIRequest) -> Dict[str, Any]:
     try:
-        llm_key = os.getenv("OPENAI_API_KEY")
-        if not llm_key:
-            raise HTTPException(status_code=500, detail="API key not found. Please check your environment variables.")
-        llm = initialize_llm(llm_key)
-
+        logging.info(f"requestid :: {request.request_id} :: Request processing starts")
         if request.xml_url:
-            xml = get_file_content(request.xml_url, is_image=False)
+            try:
+                xml = get_file_content(request.xml_url, is_image=False)
+            except Exception as e:
+                logging.info(f"requestid :: {request.request_id} :: Exception in fetching XML from URL - {request.xml_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
+                raise(HTTPException(status_code=400, detail=f"requestid :: {request.request_id} :: Exception in fetching XML from URL - {request.xml_url}"))
         else:
             xml = request.xml
 
         if request.image_url:
-            base64_image = get_file_content(request.image_url, is_image=True)
+            try:
+                base64_image = get_file_content(request.image_url, is_image=True)
+            except Exception as e:
+                base64_image = None
+                logging.info(f"requestid :: {request.request_id} :: Exception in fetching image from URL - {request.image_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
         elif request.image:
             if not validate_base64(request.image):
-                raise HTTPException(status_code=400, detail="Invalid base64 image data")
+                logging.info(f"requestid :: {request.request_id} :: Invalid base64 image data")
+                raise HTTPException(status_code=400, detail="requestid :: {request_id} :: Invalid base64 image data")
             base64_image = request.image
         else:
             base64_image = None
@@ -88,24 +106,25 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             config_data = {}
         
         if xml is None:
+            logging.info(f"requestid :: {request.request_id} :: Atleast xml or xml_url must be provided for guidance. Returning.")    
             raise HTTPException(status_code=400, detail="Atleast xml or xml_url must be provided for guidance")
+
+        llm_key = os.getenv("OPENAI_API_KEY")
+        if not llm_key:
+            logging.info(f"requestid :: {request.request_id} :: LLM API key not found. Please check your environment variables")
+            raise HTTPException(status_code=500, detail="LLM API key not found. Please check your environment variables.")
+        llm = initialize_llm(llm_key)
+        logging.info(f"requestid :: {request.request_id} :: LLM initialized")
         
-        ranked_actions, explanation = seek_guidance(xml=xml, image=base64_image, 
+        ranked_actions, explanation = await seek_guidance(request_id=request.request_id, xml=xml, image=base64_image, 
                                                     xml_url=request.xml_url, image_url=request.image_url,
                                                     config_data = config_data, user_prompt=request.user_prompt,
                                                     history=request.history, llm=llm)
         
-
-        # Output ranked actions
-        # for action in ranked_actions:
-        #     print(f"Action: {action['description']}")
-        #     print(f"  Final Score: {action['final_score']}")
-        #     print(f"  Explanation: {action['explanation']}")
-        #     print()
-        # print(f"No of Actions: {len(ranked_actions)}")
-        
         # Return the parsed output in the API response
+        logging.info(f"requestid :: {request.request_id} :: Request Processing done")
         return {
+            "request_id": request.request_id,
             "status": "success",
             "agent_response": {
                 "ranked_actions": ranked_actions,
@@ -113,21 +132,11 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"requestid :: {request.request_id} :: Exception in Prioritization agent - {str(e)} -- {traceback.format_exc()}")
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    import uvicorn
-    # try:
-    #     llm_key = os.getenv("OPENAI_API_KEY")
-    #     if not llm_key:
-    #         raise Exception(detail="API key not found. Please check your environment variables.")
-    #     print("LLM key found in the environment")
-    #     llm = initialize_llm(llm_key)
-    #     print("LLM initialized")
-    # except Exception as e:
-    #     raise Exception
     uvicorn.run(app, host="0.0.0.0", port=8000)
