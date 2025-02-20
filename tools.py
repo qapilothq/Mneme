@@ -18,7 +18,7 @@ def check_for_popup(request_id, xml, xml_url, image=None, image_url=None, test_c
             "testcase_dec": test_case_description
         }
         # API request to popup-handler
-        logging.info(f"requestid :: {request_id} :: Calling for Pop Up Handler Agent - {os.getenv("POPUP_HANDLER_URL")}")
+        logging.info(f"requestid :: {request_id} :: Calling for Pop Up Handler Agent - {os.getenv('POPUP_HANDLER_URL')}")
         api_response = make_api_request(request_id=request_id, request_url=os.getenv("POPUP_HANDLER_URL"), payload=payload)
 
         if api_response and api_response.get("status", "").lower() == 'success':
@@ -41,7 +41,7 @@ def check_for_popup(request_id, xml, xml_url, image=None, image_url=None, test_c
             logging.info(f"requestid :: {request_id} :: Pop Up Detection failed; API response - {str(api_response)}")
             return False, {}
     except Exception as e:
-        logging.info(f"requestid :: {request_id} :: Pop Up detection failed with an exception - {str(e)} -- {traceback.format_exc()}")
+        logging.error(f"requestid :: {request_id} :: Pop Up detection failed with an exception - {str(e)} -- {traceback.format_exc()}")
         return False, {}
 
 @traceable
@@ -57,7 +57,7 @@ async def generate_test_data(request_id, xml, xml_url, image=None, image_url=Non
             "config": config_data
         }
         # API request to datagenerator
-        logging.info(f"requestid :: {request_id} :: Calling for Test Data Generator Agent - {os.getenv("TEST_DATA_GENERATOR_URL")}")
+        logging.info(f"requestid :: {request_id} :: Calling for Test Data Generator Agent - {os.getenv('TEST_DATA_GENERATOR_URL')}")
         api_response = make_api_request(request_id=request_id, request_url=os.getenv("TEST_DATA_GENERATOR_URL"), payload=payload)
 
         if api_response and api_response.get("status", "").lower() == 'success':
@@ -73,7 +73,7 @@ async def generate_test_data(request_id, xml, xml_url, image=None, image_url=Non
             logging.info(f"requestid :: {request_id} :: Test Data generation failed; API response - {str(api_response)}")
             return False, []
     except Exception as e:
-        logging.info(f"requestid :: {request_id} :: Test Data generation failed with an exception - {str(e)} -- {traceback.format_exc()}")
+        logging.error(f"requestid :: {request_id} :: Test Data generation failed with an exception - {str(e)} -- {traceback.format_exc()}")
         return False, []
 
 @traceable
@@ -83,5 +83,5 @@ def make_api_request(request_id, request_url, payload):
         response.raise_for_status()  # Raises an error for bad responses
         return response.json()  # Returns the response as a JSON object
     except requests.exceptions.RequestException as e:
-        logging.info(f"requestid :: {request_id} :: Exception while making API request to - {request_url} -- Stacktrace - {traceback.format_exc()}")
+        logging.error(f"requestid :: {request_id} :: Exception while making API request to - {request_url} -- Stacktrace - {traceback.format_exc()}")
         return None

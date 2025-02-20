@@ -45,7 +45,7 @@ def llm_prioritize_actions(request_id, screen_context, base64_image, actions, hi
     try:
         # Invoke the LLM
         response = llm.invoke(input=messages)
-        logging.error(f"requestid :: {request_id} :: LLM invokation succesfull")
+        logging.info(f"requestid :: {request_id} :: LLM invokation succesfull")
         return response
     except Exception as e:
         logging.error(f"requestid :: {request_id} :: LLM invokation failed; couldn't prioritize - {str(e)} -- {traceback.format_exc()}")
@@ -161,7 +161,7 @@ async def prioritize_actions(request_id, screen_context, image, actions, history
 
         # Rank actions
         ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
-        logging.error(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
+        logging.info(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
         return ranked_actions, explanation
     else:
         logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on heuristic score")
@@ -323,8 +323,8 @@ def transform_popup_to_ranked_action(request_id, pop_up_element):
         logging.info(f"requestid :: {request_id} :: Pop Up detected; Returning - {transformed_action}")
         return transformed_action
     except Exception as e:
-        logging.info(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - {pop_up_element}")
-        logging.info(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - Stacktrace - {traceback.format_exc()}")
+        logging.error(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - {pop_up_element}")
+        logging.error(f"requestid :: {request_id} :: Exception in formatting the popup element found into prioritized action - Stacktrace - {traceback.format_exc()}")
         return {"description": "", "heuristic_score": 0, "attributes" : {}, "llm_rank": 1}
 
 @traceable

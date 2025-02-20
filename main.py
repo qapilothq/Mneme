@@ -81,7 +81,7 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             try:
                 xml = get_file_content(request.xml_url, is_image=False)
             except Exception as e:
-                logging.info(f"requestid :: {request.request_id} :: Exception in fetching XML from URL - {request.xml_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
+                logging.error(f"requestid :: {request.request_id} :: Exception in fetching XML from URL - {request.xml_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
                 raise(HTTPException(status_code=400, detail=f"requestid :: {request.request_id} :: Exception in fetching XML from URL - {request.xml_url}"))
         else:
             xml = request.xml
@@ -91,10 +91,10 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
                 base64_image = get_file_content(request.image_url, is_image=True)
             except Exception as e:
                 base64_image = None
-                logging.info(f"requestid :: {request.request_id} :: Exception in fetching image from URL - {request.image_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
+                logging.error(f"requestid :: {request.request_id} :: Exception in fetching image from URL - {request.image_url} - Exception - {str(e)} -- Stacktrace - {traceback.format_exc()}")
         elif request.image:
             if not validate_base64(request.image):
-                logging.info(f"requestid :: {request.request_id} :: Invalid base64 image data")
+                logging.error(f"requestid :: {request.request_id} :: Invalid base64 image data")
                 raise HTTPException(status_code=400, detail="requestid :: {request_id} :: Invalid base64 image data")
             base64_image = request.image
         else:
@@ -106,12 +106,12 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             config_data = {}
         
         if xml is None:
-            logging.info(f"requestid :: {request.request_id} :: Atleast xml or xml_url must be provided for guidance. Returning.")    
+            logging.error(f"requestid :: {request.request_id} :: Atleast xml or xml_url must be provided for guidance. Returning.")    
             raise HTTPException(status_code=400, detail="Atleast xml or xml_url must be provided for guidance")
 
         llm_key = os.getenv("OPENAI_API_KEY")
         if not llm_key:
-            logging.info(f"requestid :: {request.request_id} :: LLM API key not found. Please check your environment variables")
+            logging.error(f"requestid :: {request.request_id} :: LLM API key not found. Please check your environment variables")
             raise HTTPException(status_code=500, detail="LLM API key not found. Please check your environment variables.")
         llm = initialize_llm(llm_key)
         logging.info(f"requestid :: {request.request_id} :: LLM initialized")
@@ -132,6 +132,7 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             }
         }
     except Exception as e:
+        logging.error(f"requestid :: {request.request_id} :: Exception in Prioritization agent - {str(e)} -- {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"requestid :: {request.request_id} :: Exception in Prioritization agent - {str(e)} -- {traceback.format_exc()}")
 
 @app.get("/health")
