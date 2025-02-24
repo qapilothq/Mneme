@@ -54,7 +54,7 @@ async def generate_test_data(request_id, xml, xml_url, image=None, image_url=Non
             "xml_url": xml_url,
             "image": image,
             "image_url": image_url,
-            "config": config_data
+            "config_data": config_data
         }
         # API request to datagenerator
         logging.info(f"requestid :: {request_id} :: Calling for Test Data Generator Agent - {os.getenv('TEST_DATA_GENERATOR_URL')}")
