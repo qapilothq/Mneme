@@ -1,3 +1,4 @@
+from datetime import datetime
 from llm import initialize_llm
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -49,8 +50,9 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
     screen_context = ""
 
     # check if the page has a pop up
+    popup_check_start_time = datetime.now()
     popup_detected, pop_up_element = check_for_popup(request_id, xml, xml_url, image, image_url)
-
+    logging.info(f"requestid :: {request_id} :: Time taken to check for popup :: {(datetime.now() - popup_check_start_time).total_seconds() * 1000} milliseconds")
     if popup_detected:
         return [transform_popup_to_ranked_action(request_id, pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions."
     else:

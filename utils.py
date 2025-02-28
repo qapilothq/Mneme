@@ -37,8 +37,12 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
     # LLM reasoning
     elements_to_prioritize = filter_elements(request_id=request_id, uitree=uitree, ui_elements=actions)
     logging.info(f"requestid :: {request_id} :: Number of clickable elements with heuristic score higher than zero - {len(elements_to_prioritize)}")
-    logging.info(f"requestid :: {request_id} :: Marking UI elments on the image")
-    annotated_image = annotate_image(image, elements_to_prioritize)
+    if image:
+        logging.info(f"requestid :: {request_id} :: Marking UI elments on the image")
+        annotated_image = annotate_image(image, elements_to_prioritize)
+    else:
+        annotated_image = None
+    prioritization_start_time = datetime.now()
     llm_response = llm_prioritize_actions(
         request_id=request_id,
         screen_context=screen_context,
@@ -48,6 +52,7 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
         user_prompt=user_prompt,
         llm=llm
     )
+    logging.info(f"requestid :: {request_id} :: Time taken by LLM to prioritize elements :: {(datetime.now() - prioritization_start_time).total_seconds() * 1000} milliseconds")
     
     if llm_response:
         # print(f"LLM response: {llm_response}")

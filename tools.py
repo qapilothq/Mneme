@@ -1,3 +1,4 @@
+from datetime import datetime
 from langsmith import traceable
 import requests
 import os
@@ -58,8 +59,9 @@ async def generate_test_data(request_id, xml, xml_url, image=None, image_url=Non
         }
         # API request to datagenerator
         logging.info(f"requestid :: {request_id} :: Calling for Test Data Generator Agent - {os.getenv('TEST_DATA_GENERATOR_URL')}")
+        datagen_start_time = datetime.now()
         api_response = make_api_request(request_id=request_id, request_url=os.getenv("TEST_DATA_GENERATOR_URL"), payload=payload)
-
+        logging.info(f"requestid :: {request_id} :: Time taken to generate test data :: {(datetime.now() - datagen_start_time).total_seconds() * 1000} milliseconds")
         if api_response and api_response.get("status", "").lower() == 'success':
             agent_response = api_response.get("agent_response", {})
             datagen_required = agent_response.get("data_generation_required")
