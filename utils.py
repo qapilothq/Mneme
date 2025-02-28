@@ -128,6 +128,8 @@ def annotate_image(base64_image, ui_elements):
         str: Base64 encoded annotated image
     """
 
+    if not base64_image:
+        return None
 
     # Decode base64 image
     image_data = base64.b64decode(base64_image)
