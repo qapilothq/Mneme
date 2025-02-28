@@ -36,7 +36,7 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
     logging.info(f"requestid :: {request_id} :: Calling LLM to prioritize UI elments")
     # LLM reasoning
     elements_to_prioritize = filter_elements(request_id=request_id, uitree=uitree, ui_elements=actions)
-    logging.info(f"requestid :: {request_id} :: Number of clickable elements with heuristic score higher than zero - {len(elements_to_prioritize)}")
+    logging.info(f"requestid :: {request_id} :: Number of clickable elements to prioritize - {len(elements_to_prioritize)}")
     if image:
         logging.info(f"requestid :: {request_id} :: Marking UI elments on the image")
         annotated_image = annotate_image(image, elements_to_prioritize)
