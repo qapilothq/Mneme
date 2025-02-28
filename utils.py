@@ -1,119 +1,23 @@
 import traceback
-from langchain.prompts import PromptTemplate
-from fastapi import HTTPException
-from langsmith import traceable
-from prompts import action_prioritization_template, screen_context_generation_template
-import xml.etree.ElementTree as ET
 import json
 import os
 import requests
 import base64
+from datetime import datetime
+import uuid
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+from fastapi import HTTPException
+from langsmith import traceable
+from llm_utils import llm_prioritize_actions
+from xml_utils import parse_bounds
 
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @traceable
-# Use LangChain for reasoning-based prioritization
-def llm_prioritize_actions(request_id, screen_context, base64_image, actions, history, user_prompt, llm):
-    """
-    Use an LLM to prioritize actions based on screen context and history.
-    Args:
-    - screen_context: Textual representation of the current screen.
-    - actions: List of available actions with descriptions.
-    - history: Log of previously performed actions.
-    - llm: LangChain LLM object.
-
-    Returns:
-    - List of actions ranked by priority with explanations.
-    """
-    # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt"], template=action_prioritization_template)
-    # Fill the prompt template
-    filled_prompt = prompt_template.format(
-        screen_context=screen_context,
-        actions=actions,
-        history=history,
-        user_prompt=user_prompt
-    )
-    messages = [("system", filled_prompt)]
-    if base64_image:
-        messages.append(("human", [
-                        {"type": "text", "text": "Here is the screenshot of the mobile app screen. Please create an understanding of the screen to give a prioritization to the elements to act on."},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]))
-
-    try:
-        # Invoke the LLM
-        response = llm.invoke(input=messages)
-        logging.info(f"requestid :: {request_id} :: LLM invokation succesfull")
-        return response
-    except Exception as e:
-        logging.error(f"requestid :: {request_id} :: LLM invokation failed; couldn't prioritize - {str(e)} -- {traceback.format_exc()}")
-        return None
-    
-@traceable
-def llm_generate_screen_context(xml, llm):
-    """
-    Use an LLM to generate screen context based on the xml.
-    Args:
-    - xml: pagesource of the screen
-    - llm: LangChain LLM object.
-
-    Returns:
-    - Short description of the text in natural language
-    """
-    # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["xml"], template=screen_context_generation_template)
-    # Fill the prompt template
-    filled_prompt = prompt_template.format(
-        xml=xml
-    )
-
-    # Invoke the LLM
-    response = llm.invoke(filled_prompt)
-    return response
-
-# Heuristic scoring remains unchanged
-def heuristic_score(action_description, attributes):
-    """Assign a heuristic score to an action based on its attributes."""
-    important_buttons = ["login", "signup", "sign up", "sign-up", "submit"]
-    input_fields = ["input", "email", "password", "otp", "pass", "phone", "mobile", "name"]
-    score = 0
-    if attributes.get("is_external", False):
-        score -= 10
-    if attributes.get("is_ad", False):
-        score -= 15
-    if len(action_description.strip()) <= 1:
-        score -= 50
-    if check_if_important(action_description=action_description, resource_id=attributes.get("resource_id"), patterns=important_buttons):
-        score += 20
-    elif check_if_important(action_description=action_description, resource_id=attributes.get("resource_id"), patterns=input_fields):
-        score += 30
-    elif "button" in attributes.get("element_type", "").lower():
-        score += 10
-    elif "edittext" in attributes.get("element_type", "").lower():
-        score += 15
-    
-    return score
-
-def check_if_important(action_description, resource_id, patterns):
-    # Ensure action_description and resource_id are not None or empty
-    if not action_description:
-        action_description = ""
-    if not resource_id:
-        resource_id = ""
-
-    if action_description or resource_id:
-        # Check if any pattern is in action_description or resource_id
-        for pattern in patterns:
-            if pattern in action_description.lower() or pattern in resource_id.lower():
-                return True
-
-    return False
-
-@traceable
 # Prioritize actions with LangChain LLM
-async def prioritize_actions(request_id, screen_context, image, actions, history, user_prompt, llm):
+async def prioritize_actions(request_id, uitree, screen_context, image, actions, history, user_prompt, llm):
     """
     Prioritize actions using both heuristic and LLM reasoning.
     Args:
@@ -128,21 +32,23 @@ async def prioritize_actions(request_id, screen_context, image, actions, history
     # Heuristic scoring
     # for action in actions:
     #     action['heuristic_score'] = heuristic_score(action['description'], action['attributes'])
-
+    
     logging.info(f"requestid :: {request_id} :: Calling LLM to prioritize UI elments")
     # LLM reasoning
-    clickable_elements_with_heuristic_score = [action for action in actions if action['heuristic_score'] > 0 or action.get("attributes").get("clickable")]
-    logging.info(f"requestid :: {request_id} :: Number of clickable elements with heuristic score higher than zero - {len(clickable_elements_with_heuristic_score)}")
+    elements_to_prioritize = filter_elements(request_id=request_id, uitree=uitree, ui_elements=actions)
+    logging.info(f"requestid :: {request_id} :: Number of clickable elements with heuristic score higher than zero - {len(elements_to_prioritize)}")
+    logging.info(f"requestid :: {request_id} :: Marking UI elments on the image")
+    annotated_image = annotate_image(image, elements_to_prioritize)
     llm_response = llm_prioritize_actions(
         request_id=request_id,
         screen_context=screen_context,
-        base64_image=image,
-        actions=clickable_elements_with_heuristic_score,
+        base64_image=annotated_image,
+        actions=elements_to_prioritize,
         history=history,
         user_prompt=user_prompt,
         llm=llm
     )
-
+    
     if llm_response:
         # print(f"LLM response: {llm_response}")
         content = llm_response.content.replace('```json\n', '').replace('\n```', '').replace('\n', '')
@@ -150,26 +56,137 @@ async def prioritize_actions(request_id, screen_context, image, actions, history
         response_dict = json.loads(content)
         ranked_actions = response_dict.get("ranked_actions", [])
         explanation = response_dict.get("explanation", "")
-        # Parse LLM response for ranking (mock parsing for this example)
-        # for i, action in enumerate(actions):
-        #     action['llm_score'] = len(actions) - i  # Simulated LLM ranking
-        #     action['explanation'] = llm_response
-
-        # Combine scores
-        # for action in actions:
-        #     action['final_score'] = action['heuristic_score'] + action['llm_score']
 
         # Rank actions
         ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
         logging.info(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
         return ranked_actions, explanation
     else:
-        logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on heuristic score")
-        ranked_clickable_elements = sorted(clickable_elements_with_heuristic_score, key=lambda x: x['heuristic_score'], reverse=True)
+        # logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on heuristic score")
+        # ranked_clickable_elements = sorted(elements_to_prioritize, key=lambda x: x['heuristic_score'], reverse=True)
+        logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on cooridnates of the top-left of the element")
+        ranked_clickable_elements = sort_elements_top_to_bottom(elements_to_prioritize)
         for i in range(0, len(ranked_clickable_elements)):
             ranked_clickable_elements[i]["llm_rank"] = i + 1
         
         return ranked_clickable_elements, "LLM failed to prioritize; returning order based on heuristic score"
+
+def filter_elements(request_id, uitree, ui_elements):
+
+    try:
+        selected_elements = []
+        for element in ui_elements:
+            if element.get("attributes").get("clickable") == 'true':
+                node_id = element.get('node_id', None)
+                if node_id is not None:
+                    is_leaf_element = check_if_leaf_element(request_id, uitree, node_id)
+                    if is_leaf_element:
+                        selected_elements.append(element)
+
+        return selected_elements
+    except Exception as e:
+        return [element for element in ui_elements if element.get('heuristic_score') > 0 or element.get("attributes").get("clickable") == 'true']
+
+def check_if_leaf_element(request_id, uitree, node_id):
+    children = list(uitree.graph.successors(node_id))
+    if children is None or len(children) == 0:
+        return True
+    return True
+
+def sort_elements_top_to_bottom(ui_elements):
+    """
+    Sort UI elements based on their top (y) and left (x) coordinates.
+
+    Args:
+    - ui_elements: List of UI elements, each with a 'bounds' attribute.
+
+    Returns:
+    - A sorted list of UI elements.
+    """
+    def extract_coordinates(bounds):
+        # Parse bounds string like "[0,0][100,100]"
+        coords = bounds.replace("][", ",").strip("[]").split(",")
+        if len(coords) == 4:
+            x1, y1, x2, y2 = map(int, coords)
+            return y1, x1
+        return float('inf'), float('inf')  # Default to large values if parsing fails
+
+    # Sort elements based on y1 (top) and x1 (left) coordinates
+    sorted_elements = sorted(ui_elements, key=lambda element: extract_coordinates(element['attributes'].get('bounds', '')))
+
+    return sorted_elements
+
+def annotate_image(base64_image, ui_elements):
+    """
+    Annotate the image with bounding boxes and element IDs for all interactable elements.
+    
+    Args:
+        base64_image (str): Base64 encoded image string
+        xml_data (dict): Processed XML data containing interactable elements
+        
+    Returns:
+        str: Base64 encoded annotated image
+    """
+
+
+    # Decode base64 image
+    image_data = base64.b64decode(base64_image)
+    image = Image.open(BytesIO(image_data))
+
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    draw = ImageDraw.Draw(image)
+    
+    # Try to load a font, use default if not available
+    try:
+        font = ImageFont.truetype("Arial.ttf", 50)
+    except IOError:
+        font = ImageFont.load_default()
+    
+
+    # Draw bounding boxes and element IDs for all interactable elements
+    for element in ui_elements:
+        attributes = element.get("attributes", {})
+        bounds = attributes.get("bounds")
+        element_id = element.get("node_id")
+
+        if isinstance(bounds, str):
+            # Parse bounds string like "[0,0][100,100]"
+            coords = bounds.replace("][", ",").strip("[]").split(",")
+            if len(coords) == 4:
+                x1, y1, x2, y2 = map(int, coords)
+                # Draw rectangle
+                draw.rectangle([(x1, y1), (x2, y2)], outline="red", width=3)  # Increased outline width
+                # Draw element ID
+                draw.text((x1-30, y1-30), str(element_id), fill="red", font=font)  # Position text at top-left corner
+
+
+    
+    # plt.figure(figsize=(8, 8))
+    # plt.imshow(image)
+    # plt.axis('off')  # Hide the axis
+    # plt.show()
+    # Convert back to base64
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+    annotated_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+    # Ensure the directory exists
+    os.makedirs("screenshot_combined_debug", exist_ok=True)
+
+    # Generate a unique filename using a timestamp and UUID
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = uuid.uuid4().hex
+    filename = f"screenshot_combined_debug/annotated_image_{timestamp}_{unique_id}.jpg"
+
+    # Save the annotated image
+    try:
+        image.save(filename)
+        print(f"Annotated image saved as {filename}")
+    except Exception as e:
+        print(f"Error saving annotated image: {e}")
+
+    return annotated_base64
 
 def encode_image(input_source):
     """
@@ -205,93 +222,6 @@ def encode_image(input_source):
     except Exception as e:
         print(f"Error encoding image: {e}")
         return None
-
-def parse_bounds(bounds_str: str):
-    """Parse bounds string '[left,top][right,bottom]' into tuple"""
-    try:
-        coords = bounds_str.strip('[]').split('][')
-        left, top = map(int, coords[0].split(','))
-        right, bottom = map(int, coords[1].split(','))
-        return (left, top, right, bottom)
-    except Exception as e:
-        print(f"Failed to parse bounds '{bounds_str}': {str(e)}")
-        return (0, 0, 0, 0)
-
-@traceable
-def parse_layout(xml):
-    """
-    Parse XML layout into UIElement objects
-    Returns:
-    - A list of dictionaries representing UI elements
-    """
-    elements = []
-    
-    def get_xpath(node):
-        """
-        Generate the XPath for a given XML node.
-        
-        Args:
-        - node: An lxml etree Element object.
-
-        Returns:
-        - A string representing the XPath of the node.
-        """
-        path = []
-        while node is not None:
-            parent = node.getparent()
-            if parent is not None:
-                siblings = parent.findall(node.tag)
-                if len(siblings) > 1:
-                    index = siblings.index(node) + 1
-                    path.append(f"{node.tag}[{index}]")
-                else:
-                    path.append(node.tag)
-            else:
-                path.append(node.tag)
-            node = parent
-        return '/' + '/'.join(reversed(path))
-
-    def check_if_element_is_ad(node):
-        return False
-
-    def check_if_element_is_external(node):
-        return False
-
-    def extract_element(node):
-        """Recursively extract elements from XML tree"""
-        bounds = parse_bounds(node.get('bounds', '[0,0][0,0]'))
-        
-        description = node.get("text", "") + " " + node.get("content-desc", "")
-        attributes = {
-                "element_type": node.tag,
-                "bounds": bounds,
-                "content_desc": node.get('content-desc'),
-                "text": node.get('text'),
-                "clickable": node.get('clickable') == 'true',
-                "focused": node.get('focused') == 'true',
-                "enabled": node.get('enabled') == 'true',
-                "resource_id": node.get('resource-id'),
-                "class_name": node.get('class'),
-                # "xpath": get_xpath(node),
-                "is_external": check_if_element_is_external(node),
-                "is_ad": check_if_element_is_ad(node)
-            }
-        # Create a dictionary for the UI element
-        ui_element_dict = {
-            "description": description.strip(),
-            "heuristic_score": heuristic_score(description.strip(), attributes),
-            "attributes" : attributes
-        }
-
-        # Append the dictionary to the elements list
-        elements.append(ui_element_dict)
-        
-        for child in node:
-            extract_element(child)
-
-    layout_tree = ET.fromstring(xml)
-    extract_element(layout_tree)
-    return elements
 
 def transform_popup_to_ranked_action(request_id, pop_up_element):
     # Transforming the popup element output to action format
@@ -393,4 +323,3 @@ def get_file_content(file_path_or_url: str, is_image: bool = False) -> str:
     else:
         # Return string for XML content
         return content.decode('utf-8')
-

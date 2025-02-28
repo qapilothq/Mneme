@@ -2,7 +2,9 @@ from llm import initialize_llm
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
-from utils import parse_layout, get_file_content, prioritize_actions, map_data_fields_to_ranked_actions, transform_popup_to_ranked_action
+from ui_tree import UITree
+from utils import get_file_content, prioritize_actions, map_data_fields_to_ranked_actions, transform_popup_to_ranked_action
+from xml_utils import parse_layout
 from tools import check_for_popup, generate_test_data
 from langsmith import traceable
 from dotenv import load_dotenv
@@ -40,8 +42,9 @@ def validate_base64(base64_string: str) -> bool:
 @traceable
 async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data, user_prompt, history, llm):
     logging.info(f"requestid :: {request_id} :: Parsing XML to extract UI elements")
-    ui_elements = parse_layout(xml)
-    logging.info(f"requestid :: {request_id} :: Number of elements found - {len(ui_elements)}")
+    # ui_elements_as_list = parse_layout(xml)
+    uitree = UITree(request_id=request_id, xml=xml)
+    logging.info(f"requestid :: {request_id} :: Number of elements found - {len(list(uitree.ui_element_dict_processed.values()))}")
     # screen_context = llm_generate_screen_context(xml, llm)
     screen_context = ""
 
@@ -53,8 +56,8 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
     else:
         # Run prioritize_actions and generate_test_data concurrently
         prioritize_task = asyncio.create_task(prioritize_actions(
-            request_id=request_id, screen_context=screen_context, 
-            image=image, actions=ui_elements, history=history,
+            request_id=request_id, uitree=uitree, screen_context=screen_context, 
+            image=image, actions=list(uitree.ui_element_dict_processed.values()), history=history,
             user_prompt=user_prompt, llm=llm
         ))
         

@@ -4,3 +4,4 @@
 *.toml
 *.log
 venv/
+screenshot_combined_debug/
