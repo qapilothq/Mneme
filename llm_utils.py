@@ -1,6 +1,6 @@
 from langsmith import traceable
 from langchain.prompts import PromptTemplate
-from prompts import action_prioritization_template, screen_context_generation_template, action_prioritization_template_with_annotated_image
+from prompts import action_prioritization_template, screen_context_generation_template, phase_objective_map, action_prioritization_template_objective_phase_2
 
 import traceback
 import logging
@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 @traceable
 # Use LangChain for reasoning-based prioritization
-def llm_prioritize_actions(request_id, screen_context, base64_image, actions, history, user_prompt, llm):
+def llm_prioritize_actions(request_id, screen_context, base64_image, actions, history, user_prompt, phase, llm):
     """
     Use an LLM to prioritize actions based on screen context and history.
     Args:
@@ -20,14 +20,24 @@ def llm_prioritize_actions(request_id, screen_context, base64_image, actions, hi
     Returns:
     - List of actions ranked by priority with explanations.
     """
-    # Create a chain with the LLM and prompt template
-    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt"], template=action_prioritization_template)
+    selected_user_prompt = user_prompt
+    objective = action_prioritization_template_objective_phase_2
+    if phase:
+        phase_prompt_objective = phase_objective_map.get(phase)
+        if phase_prompt_objective:
+            selected_user_prompt = phase_prompt_objective.get("user_prompt")
+            objective = phase_prompt_objective.get("objective")
+            
+
+    # Create prompt template
+    prompt_template = PromptTemplate(input_variables=["screen_context", "actions", "history", "user_prompt", "objective"], template=action_prioritization_template)
     # Fill the prompt template
     filled_prompt = prompt_template.format(
         screen_context=screen_context,
         actions=actions,
         history=history,
-        user_prompt=user_prompt
+        user_prompt=selected_user_prompt,
+        objective=objective
     )
     messages = [("system", filled_prompt)]
     if base64_image:

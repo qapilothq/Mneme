@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 @traceable
 # Prioritize actions with LangChain LLM
-async def prioritize_actions(request_id, uitree, screen_context, image, actions, history, user_prompt, llm):
+async def prioritize_actions(request_id, uitree, screen_context, image, actions, history, user_prompt, phase, llm):
     """
     Prioritize actions using both heuristic and LLM reasoning.
     Args:
@@ -50,6 +50,7 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
         actions=elements_to_prioritize,
         history=history,
         user_prompt=user_prompt,
+        phase=phase,
         llm=llm
     )
     logging.info(f"requestid :: {request_id} :: Time taken by LLM to prioritize elements :: {(datetime.now() - prioritization_start_time).total_seconds() * 1000} milliseconds")

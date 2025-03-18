@@ -32,6 +32,7 @@ class APIRequest(BaseModel):
     xml_url: Optional[str] = None
     image_url: Optional[str] = None
     config_data: Optional[dict] = {}
+    phase : Optional[str] = "2"
 
 def validate_base64(base64_string: str) -> bool:
     try:
@@ -41,7 +42,7 @@ def validate_base64(base64_string: str) -> bool:
         return False
 
 @traceable
-async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data, user_prompt, history, llm):
+async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data, user_prompt, history, phase, llm):
     logging.info(f"requestid :: {request_id} :: Parsing XML to extract UI elements")
     # ui_elements_as_list = parse_layout(xml)
     uitree = UITree(request_id=request_id, xml=xml)
@@ -60,7 +61,7 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
         prioritize_task = asyncio.create_task(prioritize_actions(
             request_id=request_id, uitree=uitree, screen_context=screen_context, 
             image=image, actions=list(uitree.ui_element_dict_processed.values()), history=history,
-            user_prompt=user_prompt, llm=llm
+            user_prompt=user_prompt, phase=phase, llm=llm
         ))
         
         generate_data_task = asyncio.create_task(generate_test_data(
@@ -124,7 +125,7 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
         ranked_actions, explanation = await seek_guidance(request_id=request.request_id, xml=xml, image=base64_image, 
                                                     xml_url=request.xml_url, image_url=request.image_url,
                                                     config_data = config_data, user_prompt=request.user_prompt,
-                                                    history=request.history, llm=llm)
+                                                    history=request.history, phase = request.phase, llm=llm)
         
         # Return the parsed output in the API response
         logging.info(f"requestid :: {request.request_id} :: Request Processing done")

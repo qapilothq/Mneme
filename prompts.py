@@ -15,21 +15,19 @@ action_prioritization_template = """
     Note: Ignore the user prompt if nothing is given. Please create an understanding of the user journey yourself.
     
     Objective:
-    You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
-    You are intended to help in the exploration of the app by providing a priority order to the actionable elements on the screen.
-    This priority order should help make the navigation optimised to explore the meaningful user journeys.
-    Following are a few guidelines to follow while creating the priority list
+    {objective}
+
+    General Guidelines:
+    Following are a few general guidelines to follow while creating the priority list
     1. Actions that take the exploration out of the app should not done. 
     2. Elements that are ads should not be acted upon
     3. Actions that may lead to loops should be low priority. 
-    4. Actions that lead to meaningful user journeys based on what actions have been done till now should be given higher priority.
-    5. If there are multiple actions to be done on a single screen in the same user journey, then priority order should reflect the order in which the actions are to be performed.
-    As an example to the 4th guideline, on a login screen, entering username, entering password and clicking login are all part of the same user journey.
+    4. If there are multiple actions to be done on a single screen in the same user journey, then priority order should reflect the order in which the actions are to be performed.
+    As an example to this guideline, on a login screen, entering username, entering password and clicking login are all part of the same user journey.
     This journey can be successfull only when the priority ranking of elements to act on reflects the order - enter username, enter password, check any checkboxes before clicking login button. 
     This would not be an meaningful journey in any other order.
-    6. Use the annotated image which has actionable elements also to create an understanding of the elements and the order in which they have to be interacted with.
-    6. Use 'heuristic_score' mentioned for each action as one of the guides to give priority. Higher the heuristic score, higher the priority.
-    7. Also, there are boolean fields called 'focused' and 'enabled' inside attributes of each action. Use these values to decide the priority order. Prioritize the enabled and focussed elements over others.
+    5. Use the annotated image which has actionable elements also to create an understanding of the elements and the order in which they have to be interacted with.
+    6. Also, there are boolean fields called 'focused' and 'enabled' inside attributes of each action. Use these values to decide the priority order. Prioritize the enabled and focussed elements over others.
     Also you can use the image, if available, to identify which elements are focused and enabled, and are important for the flow of the journey.
 
     Output format:
@@ -41,6 +39,44 @@ action_prioritization_template = """
 
     Generate the output in JSON only, without any additional text.
 """
+
+action_prioritization_template_objective_phase_1 = """
+    You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
+    You are intended to help reaching the home screen of the app by performing the necessary next steps by providing a priority order to the actionable elements on the screen.
+    Use the history of actions performed till now to optimise the path to reach the home screen in as few steps as possible.
+    This priority order should help make the navigation optimised to reach the home screen of the app.
+    Some guidelines specific for this objective are - 
+    1. Actions that lead to proceeding the particular user journey to reach home screen based on what actions have been done till now(if available) should be given higher priority.
+    2. Any actions that would take use away from home screen should be of lower priority.
+    3. Any actions that would make the journey to home screen go into loops or make the journey longer should be of lower priority
+"""
+
+action_prioritization_template_objective_phase_2_v1 = """
+    You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
+    You are intended to help in the exploration of the app by providing a priority order to the actionable elements on the screen.
+    This priority order should help make the navigation optimised to explore the meaningful user journeys.
+    Some guidelines for this objective are - 
+    1. Use 'heuristic_score' mentioned for each action as one of the guides to give priority. Higher the heuristic score, higher the priority.
+    
+"""
+
+action_prioritization_template_objective_phase_2_v2 = """
+    You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
+    You are intended to help in the exploration of the app by providing a priority order to the actionable elements on the screen.
+    This priority order should help make the navigation optimised to explore the meaningful user journeys.
+    Actions that lead to meaningful user journeys based on what actions have been done till now should be given higher priority.
+"""
+
+action_prioritization_template_objective_phase_3 = """
+    You are navigating a mobile app. On a given screen there would be a number of elements which are actionable.
+    You are intended to help in completing the journey based on the history of actions performed till now by providing a priority order to the actionable elements on the screen.
+    This priority order should help make the navigation optimised to complete the user journey.
+    Some guidelines specific for this objective are - 
+    1. Actions that lead to proceeding the particular user journey based on what actions have been done till now should be given higher priority.
+    2. Any actions that would take use away from this particular journey should be of lower priority.
+"""
+
+action_prioritization_template_objective_phase_2 = action_prioritization_template_objective_phase_2_v2
 
 action_prioritization_template_with_annotated_image = """
     Following screen context describes the mobile app screen in short:
@@ -83,6 +119,7 @@ action_prioritization_template_with_annotated_image = """
 """
 
 screen_context_generation_template = """
+
     You are navigating a mobile app. 
     You are an experienced tester who can summarize the screen functionalities in a short and succint way.
     Given the page source of the screen:
@@ -92,3 +129,22 @@ screen_context_generation_template = """
     to understand what actions are possible and what to test in a given screen.
     Keep the description to less than 20 words.
     """
+
+
+phase_objective_map = {
+    "find-home-node" : {
+        "stage": "1",
+        "user_prompt": "Prioritize next steps to reach home screen in as less steps as possible",
+        "objective": action_prioritization_template_objective_phase_1
+    },
+    "identify-journey-start-nodes" : {
+        "stage": "1",
+        "user_prompt": "Prioritize the action on the screen to identify the most important journeys",
+        "objective": action_prioritization_template_objective_phase_2
+    },
+    "explore-user-journeys" : {
+        "stage": "1",
+        "user_prompt": "Complete the journey based on the history of actions performed",
+        "objective": action_prioritization_template_objective_phase_3
+    }
+}
