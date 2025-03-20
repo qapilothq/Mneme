@@ -62,12 +62,14 @@ class UITree:
         # attributes['xpath'] = get_xpath(node)
         attributes['content_desc'] = attributes.get('content-desc', '')
         attributes['resource_id'] = attributes.get('resource-id', '')
+        attributes.pop('content-desc', None)
+        attributes.pop('resource-id', None)
         ui_element = {
             'node_id': node_id,
             'description': node_description,
             'attributes' : attributes,
-            'is_external': check_if_element_is_external(node),
-            'is_ad': check_if_element_is_ad(node)
+            # 'is_external': check_if_element_is_external(node),
+            # 'is_ad': check_if_element_is_ad(node)
         }
 
         ui_element['heuristic_score'] = calculate_heuristic_score(node_id=node_id, node_data=ui_element)

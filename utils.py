@@ -1,3 +1,4 @@
+import copy
 import traceback
 import json
 import os
@@ -47,7 +48,7 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
         request_id=request_id,
         screen_context=screen_context,
         base64_image=annotated_image,
-        actions=elements_to_prioritize,
+        actions=trim_element_jsons(request_id=request_id, elements_to_trim=elements_to_prioritize),
         history=history,
         user_prompt=user_prompt,
         phase=phase,
@@ -60,11 +61,24 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
         content = llm_response.content.replace('```json\n', '').replace('\n```', '').replace('\n', '')
         # Parse the JSON response
         response_dict = json.loads(content)
-        ranked_actions = response_dict.get("ranked_actions", [])
+        ranked_node_ids = response_dict.get("ranked_actions", [])
         explanation = response_dict.get("explanation", "")
 
         # Rank actions
-        ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
+        # ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
+        ranked_actions = []
+        rank = 1
+        for node_id in ranked_node_ids:
+            ui_element = uitree.ui_element_dict_processed.get(node_id)
+            if ui_element:
+                ranked_actions.append({
+                    "node_id": node_id,
+                    "llm_rank": rank,
+                    "description": ui_element.get("description"),
+                    "heuristic_score": ui_element.get("heuristic_score"),
+                    "attributes": ui_element.get("attributes")
+                })
+                rank += 1
         logging.info(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
         return ranked_actions, explanation
     else:
@@ -79,10 +93,13 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
 
 def filter_elements(request_id, uitree, ui_elements):
 
+    fields_to_check = ["clickable", "enabled", "displayed"]
     try:
         selected_elements = []
         for element in ui_elements:
-            if element.get("attributes").get("clickable") == 'true':
+            attributes = element.get("attributes")
+            
+            if all(field in attributes and 'true' == attributes.get(field)  for field in fields_to_check):
                 node_id = element.get('node_id', None)
                 if node_id is not None:
                     is_leaf_element = check_if_leaf_element(request_id, uitree, node_id)
@@ -91,7 +108,27 @@ def filter_elements(request_id, uitree, ui_elements):
 
         return selected_elements
     except Exception as e:
-        return [element for element in ui_elements if element.get('heuristic_score') > 0 or element.get("attributes").get("clickable") == 'true']
+        return [element for element in ui_elements if element.get('heuristic_score') > 0 or all(field in element.get("attributes") and 'true' == element.get("attributes").get(field)  for field in fields_to_check)]
+
+def trim_element_jsons(request_id, elements_to_trim):
+    # attributes_to_trim = ["index", "package", "class", "checkable", "checked", "clickable", "enabled", "focusable", "focused", "long-clickable", "password", "resource_id", "scrollable", "selected", "bounds", "displayed", "xpath"]
+    # fields_to_trim = ["is_external", "is_ad", "heuristic_score", "attributes"]
+    try:
+        trimmed_elements = []
+        for element in elements_to_trim:
+            attributes = element.get("attributes")
+            trimmed_elements.append({
+                "node_id": element.get("node_id"),
+                "description": element.get("description"),
+                "element_type": attributes.get("class"),
+                "bounds": attributes.get("bounds")
+            })
+
+        return trimmed_elements
+            
+    except Exception as e:
+        logging.error(f"requestid :: {request_id} :: Exception in trimming tokens in filtered elements before prioritization; returning as is.")
+        return elements_to_trim
 
 def check_if_leaf_element(request_id, uitree, node_id):
     children = list(uitree.graph.successors(node_id))
