@@ -330,16 +330,17 @@ def map_data_fields_to_ranked_actions(request_id, ranked_actions, data_fields):
 def get_element_identifier(element_dict) -> str:
 
     if element_dict:
-        resource_id = element_dict.get('resource_id')
-        resource_id = resource_id.strip() if resource_id is not None else ""
+        # resource_id = element_dict.get('resource_id')
+        # resource_id = resource_id.strip() if resource_id is not None else ""
 
-        text = element_dict.get("text")
-        text = text.strip() if text is not None else ""
+        # text = element_dict.get("text")
+        # text = text.strip() if text is not None else ""
 
-        content_desc = element_dict.get("content_desc")
-        content_desc = content_desc.strip() if content_desc is not None else ""
+        # content_desc = element_dict.get("content_desc")
+        # content_desc = content_desc.strip() if content_desc is not None else ""
 
-        return (resource_id + text + content_desc).strip()
+        # return (resource_id + text + content_desc).strip()
+        return element_dict.get('bounds', None)
     else:
         return ""
 
