@@ -305,7 +305,7 @@ def transform_popup_to_ranked_action(request_id, pop_up_element):
 @traceable
 def map_data_fields_to_ranked_actions(request_id, ranked_actions, data_fields):
     try:
-        logging.info("requestid :: {request_id} :: Mapping generated data fields to prioritized actions")
+        logging.info(f"requestid :: {request_id} :: Mapping generated data fields to prioritized actions")
         for action in ranked_actions:
             action_identifier = get_element_identifier(action.get("attributes", {}))
             if action_identifier:

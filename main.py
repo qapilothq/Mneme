@@ -73,7 +73,7 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
         data_gen_required, data_fields = await generate_data_task
 
         if data_gen_required:
-            updated_ranked_actions = map_data_fields_to_ranked_actions(request_id, ranked_actions, data_fields)
+            updated_ranked_actions = map_data_fields_to_ranked_actions(request_id=request_id, ranked_actions=ranked_actions, data_fields=data_fields)
             return updated_ranked_actions, explanation
         else:
             return ranked_actions, explanation
