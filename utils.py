@@ -63,24 +63,26 @@ async def prioritize_actions(request_id, uitree, screen_context, image, actions,
         response_dict = json.loads(content)
         ranked_node_ids = response_dict.get("ranked_actions", [])
         explanation = response_dict.get("explanation", "")
+        journey_completed = response_dict.get("journey_completed","")
 
         # Rank actions
         # ranked_actions = sorted(ranked_actions, key=lambda x: x['llm_rank'], reverse=False)
         ranked_actions = []
         rank = 1
-        for node_id in ranked_node_ids:
-            ui_element = uitree.ui_element_dict_processed.get(node_id)
+        for element in ranked_node_ids:
+            ui_element = uitree.ui_element_dict_processed.get(element['node_id'])
             if ui_element:
                 ranked_actions.append({
-                    "node_id": node_id,
+                    "node_id": element['node_id'],
                     "llm_rank": rank,
+                    "action_description" : element['action_description'],
                     "description": ui_element.get("description"),
                     "heuristic_score": ui_element.get("heuristic_score"),
                     "attributes": ui_element.get("attributes")
                 })
                 rank += 1
         logging.info(f"requestid :: {request_id} :: LLM prioritized; returning order based on llm rank. Number of ranked actions: {len(ranked_actions)}")
-        return ranked_actions, explanation
+        return ranked_actions, explanation,journey_completed
     else:
         # logging.error(f"requestid :: {request_id} :: LLM failed to prioritize; returning order based on heuristic score")
         # ranked_clickable_elements = sorted(elements_to_prioritize, key=lambda x: x['heuristic_score'], reverse=True)

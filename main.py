@@ -55,7 +55,7 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
     popup_detected, pop_up_element = check_for_popup(request_id, xml, xml_url, image, image_url)
     logging.info(f"requestid :: {request_id} :: Time taken to check for popup :: {(datetime.now() - popup_check_start_time).total_seconds() * 1000} milliseconds")
     if popup_detected:
-        return [transform_popup_to_ranked_action(request_id, pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions."
+        return [transform_popup_to_ranked_action(request_id, pop_up_element)], "Pop up is identified, so need to close the popup to perform any further actions.", False
     else:
         # Run prioritize_actions and generate_test_data concurrently
         prioritize_task = asyncio.create_task(prioritize_actions(
@@ -69,14 +69,14 @@ async def seek_guidance(request_id, xml, image, xml_url, image_url, config_data,
         ))
 
         # Wait for both tasks to complete
-        ranked_actions, explanation = await prioritize_task
+        ranked_actions, explanation,journey_completed = await prioritize_task
         data_gen_required, data_fields = await generate_data_task
 
         if data_gen_required:
             updated_ranked_actions = map_data_fields_to_ranked_actions(request_id=request_id, ranked_actions=ranked_actions, data_fields=data_fields)
-            return updated_ranked_actions, explanation
+            return updated_ranked_actions, explanation,journey_completed
         else:
-            return ranked_actions, explanation
+            return ranked_actions, explanation,journey_completed
 
 @traceable
 @app.post("/invoke")
@@ -122,7 +122,7 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
         llm = initialize_llm(llm_key)
         logging.info(f"requestid :: {request.request_id} :: LLM initialized")
         
-        ranked_actions, explanation = await seek_guidance(request_id=request.request_id, xml=xml, image=base64_image, 
+        ranked_actions, explanation,journey_completed = await seek_guidance(request_id=request.request_id, xml=xml, image=base64_image, 
                                                     xml_url=request.xml_url, image_url=request.image_url,
                                                     config_data = config_data, user_prompt=request.user_prompt,
                                                     history=request.history, phase = request.phase, llm=llm)
@@ -134,7 +134,8 @@ async def run_service(request: APIRequest) -> Dict[str, Any]:
             "status": "success",
             "agent_response": {
                 "ranked_actions": ranked_actions,
-                "explanation": explanation
+                "explanation": explanation,
+                  "journey_completed": journey_completed
             }
         }
     except Exception as e:
